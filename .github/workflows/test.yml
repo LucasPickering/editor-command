@@ -1,0 +1,108 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+# This uses the toolchain defined in rust-toolchain
+jobs:
+  fmt:
+    name: "Rustfmt"
+    runs-on: ubuntu-latest
+    env:
+      # Rustfmt requires a nightly toolchain because we use unstable rules. The
+      # chosen version is fairly arbitrary
+      TOOLCHAIN: nightly-2024-04-20
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{env.TOOLCHAIN}}
+          components: rustfmt
+
+      - name: Cache cargo files
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-nightly-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Rustfmt
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: ${{env.TOOLCHAIN}}
+          command: fmt
+          args: -- --check
+
+  lint:
+    name: Check/Lint - ${{ matrix.platform.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Run linting on every platform to make sure we didn't break any builds.
+        # This is a subset of the Rust targets we support, just one per OS.
+        platform:
+          - name: Linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macOS
+            os: macOS-latest
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache Rust files
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform.target }}
+
+      - name: Install toolchain
+        run: rustup target add ${{ matrix.platform.target }}
+
+      - name: Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --target ${{ matrix.platform.target }} --all-targets --all-features -- -D clippy::all'
+
+  doc:
+    name: Check Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache Rust files
+        uses: swatinem/rust-cache@v2
+
+      - name: Doc
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --no-deps --all-features --document-private-items
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache Rust files
+        uses: swatinem/rust-cache@v2
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
