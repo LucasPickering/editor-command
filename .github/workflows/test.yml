@@ -16,22 +16,18 @@ jobs:
       # chosen version is fairly arbitrary
       TOOLCHAIN: nightly-2024-04-20
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{env.TOOLCHAIN}}
+          toolchain: ${{ env.TOOLCHAIN }}
           components: rustfmt
 
       - name: Cache Rust files
         uses: swatinem/rust-cache@v2
 
       - name: Rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          toolchain: ${{env.TOOLCHAIN}}
-          command: fmt
-          args: -- --check
+        run: cargo +${{ env.TOOLCHAIN }} fmt -- --check
 
   lint:
     name: Check/Lint - ${{ matrix.platform.name }}
@@ -52,7 +48,7 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.platform.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Cache Rust files
         uses: swatinem/rust-cache@v2
@@ -63,25 +59,19 @@ jobs:
         run: rustup target add ${{ matrix.platform.target }}
 
       - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --target ${{ matrix.platform.target }} --all-targets --all-features -- -D clippy::all'
+        run: cargo clippy --target ${{ matrix.platform.target }} --all-targets --all-features -- -D clippy::all
 
   doc:
     name: Check Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Cache Rust files
         uses: swatinem/rust-cache@v2
 
       - name: Doc
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --no-deps --all-features --document-private-items
+        run: cargo doc --no-deps --all-features --document-private-items
         env:
           RUSTDOCFLAGS: -D warnings
 
@@ -104,7 +94,7 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.platform.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Cache Rust files
         uses: swatinem/rust-cache@v2
@@ -115,7 +105,4 @@ jobs:
         run: rustup target add ${{ matrix.platform.target }}
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace
+        run: cargo test --workspace
