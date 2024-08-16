@@ -18,15 +18,16 @@
 //! #     ("VISUAL", None::<&str>),
 //! #     ("EDITOR", None),
 //! # ]);
-//! use editor_command::EditorCommand;
+//! use editor_command::EditorBuilder;
 //! use std::process::Command;
 //!
 //! std::env::set_var("VISUAL", "vim");
-//! let command: Command = EditorCommand::edit_file("file.txt").unwrap();
+//! let command: Command = EditorBuilder::edit_file("file.txt").unwrap();
 //! assert_eq!(command.get_program(), "vim");
 //! ```
 //!
-//! Here's an example of using the builder pattern to define a fallback command:
+//! Here's an example of using the builder pattern to provide both an override
+//! and a fallback command to [EditorBuilder]:
 //!
 //! ```
 //! # // Hide this part because it doesn't provide any value to the user
@@ -34,37 +35,55 @@
 //! #     ("VISUAL", None::<&str>),
 //! #     ("EDITOR", None),
 //! # ]);
-//! use editor_command::EditorCommand;
+//! use editor_command::EditorBuilder;
 //! use std::process::Command;
 //!
-//! let command: Command = EditorCommand::new()
+//! // In your app, this could be an optional field from a config object
+//! let override_command = Some("code --wait");
+//! let command: Command = EditorBuilder::new()
+//!     // In this case, the override is always populated so it will always win.
+//!     // In reality it would be an optional user-provided field.
+//!     .source(override_command)
 //!     .environment()
 //!     // If both VISUAL and EDITOR are undefined, we'll fall back to this
 //!     .source(Some("vi"))
 //!     .build()
 //!     .unwrap();
-//! assert_eq!(command.get_program(), "vi");
+//! assert_eq!(format!("{command:?}"), "\"code\" \"--wait\"");
 //! ```
+//!
+//! This pattern is useful for apps that have a way to configure an app-specific
+//! editor. For example, [git has the `core.editor` config field](https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration).
+//!
+//! ## Syntax
+//!
+//! The syntax of the command is meant to resemble command syntax for common
+//! shells. The first word is the program name, and subsequent tokens (separated
+//! by spaces) are arguments to that program. Single and double quotes can be
+//! used to join multiple tokens together into a single argument.
+//!
+//! Command parsing is handled by the crate [shellish_parse] (with default
+//! [ParseOptions]). Refer to those docs for exact details on the syntax.
 //!
 //! ## Lifetimes
 //!
-//! [EditorCommand] accepts a lifetime parameter, which is bound to the string
+//! [EditorBuilder] accepts a lifetime parameter, which is bound to the string
 //! data it contains (both command strings and paths). This is to prevent
 //! unnecessary cloning when building commands/paths from `&str`s. If you need
-//! the instance of [EditorCommand] to be `'static`, e.g. so it can be returned
-//! from a function, you can simply use `EditorCommand<'static>`. Internally,
+//! the instance of [EditorBuilder] to be `'static`, e.g. so it can be returned
+//! from a function, you can simply use `EditorBuilder<'static>`. Internally,
 //! all strings are stored as [Cow]s, so clones will be made as necessary.
 //!
 //! ```rust
-//! use editor_command::EditorCommand;
+//! use editor_command::EditorBuilder;
 //!
 //! /// This is a contrived example of returning a command with owned data
-//! fn get_editor_command<'a>(command: &'a str) -> EditorCommand<'static> {
+//! fn get_editor_builder<'a>(command: &'a str) -> EditorBuilder<'static> {
 //!     // The lifetime bounds enforce the .to_owned() call
-//!     EditorCommand::new().source(Some(command.to_owned()))
+//!     EditorBuilder::new().source(Some(command.to_owned()))
 //! }
 //!
-//! let command = get_editor_command("vim").build().unwrap();
+//! let command = get_editor_builder("vim").build().unwrap();
 //! assert_eq!(command.get_program(), "vim");
 //! ```
 //!
@@ -84,10 +103,10 @@ use std::{
 };
 
 /// A builder for a [Command] that will open the user's configured editor. For
-/// simple cases you probably can just use [EditorCommand::edit_file]. See
-/// [module-level documentation](super) for more details and examples.
+/// simple cases you probably can just use [EditorBuilder::edit_file]. See
+/// [crate-level documentation](crate) for more details and examples.
 #[derive(Clone, Debug, Default)]
-pub struct EditorCommand<'a> {
+pub struct EditorBuilder<'a> {
     /// Command to parse. This will be populated the first time we're given a
     /// source with a value. After that, it remains unchanged.
     command: Option<Cow<'a, str>>,
@@ -95,7 +114,7 @@ pub struct EditorCommand<'a> {
     paths: Vec<Cow<'a, Path>>,
 }
 
-impl<'a> EditorCommand<'a> {
+impl<'a> EditorBuilder<'a> {
     /// Create a new editor command with no sources. You probably want to call
     /// [environment](Self::environment) on the returned value.
     pub fn new() -> Self {
@@ -105,21 +124,27 @@ impl<'a> EditorCommand<'a> {
     /// Shorthand for opening a file with the command set in `VISUAL`/`EDITOR`.
     ///
     /// ```ignore
-    /// EditorCommand::edit_file("file.yml")
+    /// EditorBuilder::edit_file("file.yml")
     /// ```
     ///
     /// is equivalent to:
     ///
     /// ```ignore
-    /// EditorCommand::new().environment().path(path).build()
+    /// EditorBuilder::new().environment().path(path).build()
     /// ```
     pub fn edit_file(
+        // This is immediately being built, so we can accept AsRef<Path>
+        // instead of Into<Cow<'a, Path>> because we know we won't need an
+        // owned PathBuf. This allows us to accept &str, which is nice
         path: impl AsRef<Path>,
-    ) -> Result<Command, EditorCommandError> {
+    ) -> Result<Command, EditorBuilderError> {
         Self::new().environment().path(path.as_ref()).build()
     }
 
-    /// Add a static string as a source for the command. TODO more
+    /// Add a static string as a source for the command. This is useful for
+    /// static defaults, or external sources such as a configuration file.
+    /// This accepts an `Option` so you can easily build a chain of sources
+    /// that may or may not be defined.
     pub fn source(mut self, source: Option<impl Into<Cow<'a, str>>>) -> Self {
         self.command = self.command.or(source.map(Into::into));
         self
@@ -145,7 +170,6 @@ impl<'a> EditorCommand<'a> {
     /// of paths. The paths will all be included in the final command, in the
     /// order this method was called.
     pub fn path(mut self, path: impl Into<Cow<'a, Path>>) -> Self {
-        // TODO accept &str, &Path, and PathBuf as args
         self.paths.push(path.into());
         self
     }
@@ -153,26 +177,21 @@ impl<'a> EditorCommand<'a> {
     /// Search all configured sources (in their order of definition), and parse
     /// the first one that's populated as a shell command. Then use that to
     /// build an executable [Command].
-    ///
-    /// ## Command Syntax
-    ///
-    /// The loaded command string will be parsed as most common shells do. For
-    /// specifics about parsing, see the crate [shellish_parse].
-    pub fn build(self) -> Result<Command, EditorCommandError> {
+    pub fn build(self) -> Result<Command, EditorBuilderError> {
         // Find the first source that has a value. We *don't* validate that the
         // command is non-empty or parses. If something has a value, it's better
         // to use it and give the user an error if it's invalid, than to
         // silently skip past it.
-        let command_str = self.command.ok_or(EditorCommandError::NoCommand)?;
+        let command_str = self.command.ok_or(EditorBuilderError::NoCommand)?;
 
         // Parse it as a shell command
         let mut parsed =
             shellish_parse::parse(&command_str, ParseOptions::default())
-                .map_err(EditorCommandError::ParseError)?;
+                .map_err(EditorBuilderError::ParseError)?;
 
         // First token is the program name, rest are arguments
         let mut tokens = parsed.drain(..);
-        let program = tokens.next().ok_or(EditorCommandError::EmptyCommand)?;
+        let program = tokens.next().ok_or(EditorBuilderError::EmptyCommand)?;
         let args = tokens;
 
         let mut command = Command::new(program);
@@ -185,7 +204,7 @@ impl<'a> EditorCommand<'a> {
 
 /// Any error that can occur while loading the editor command.
 #[derive(Debug)]
-pub enum EditorCommandError {
+pub enum EditorBuilderError {
     /// Couldn't find an editor command anywhere
     NoCommand,
 
@@ -196,29 +215,29 @@ pub enum EditorCommandError {
     ParseError(shellish_parse::ParseError),
 }
 
-impl Display for EditorCommandError {
+impl Display for EditorBuilderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EditorCommandError::NoCommand => write!(
+            EditorBuilderError::NoCommand => write!(
                 f,
                 "Edit command not defined in any of the listed sources"
             ),
-            EditorCommandError::EmptyCommand => {
+            EditorBuilderError::EmptyCommand => {
                 write!(f, "Editor command is empty")
             }
-            EditorCommandError::ParseError(source) => {
+            EditorBuilderError::ParseError(source) => {
                 write!(f, "Invalid editor command: {source}")
             }
         }
     }
 }
 
-impl Error for EditorCommandError {
+impl Error for EditorBuilderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            EditorCommandError::NoCommand
-            | EditorCommandError::EmptyCommand => None,
-            EditorCommandError::ParseError(source) => Some(source),
+            EditorBuilderError::NoCommand
+            | EditorBuilderError::EmptyCommand => None,
+            EditorBuilderError::ParseError(source) => Some(source),
         }
     }
 }
@@ -236,7 +255,7 @@ mod tests {
                 ("VISUAL", Some("visual")),
                 ("EDITOR", Some("editor")),
             ]);
-            EditorCommand::new()
+            EditorBuilder::new()
                 .source(None::<&str>)
                 .source(Some("priority"))
                 .environment()
@@ -253,7 +272,7 @@ mod tests {
                 ("VISUAL", Some("visual")),
                 ("EDITOR", Some("editor")),
             ]);
-            EditorCommand::new().environment().source(Some("default"))
+            EditorBuilder::new().environment().source(Some("default"))
         };
         assert_cmd(builder, "visual", &[]);
     }
@@ -266,7 +285,7 @@ mod tests {
                 ("VISUAL", None),
                 ("EDITOR", Some("editor")),
             ]);
-            EditorCommand::new().environment().source(Some("default"))
+            EditorBuilder::new().environment().source(Some("default"))
         };
         assert_cmd(builder, "editor", &[]);
     }
@@ -279,7 +298,7 @@ mod tests {
                 ("VISUAL", None::<&str>),
                 ("EDITOR", None),
             ]);
-            EditorCommand::new().environment().source(Some("default"))
+            EditorBuilder::new().environment().source(Some("default"))
         };
         assert_cmd(builder, "default", &[]);
     }
@@ -287,12 +306,11 @@ mod tests {
     /// Test included paths as extra arguments
     #[test]
     fn paths() {
-        let builder = EditorCommand::new()
+        let builder = EditorBuilder::new()
             .source(Some("ed"))
             // All of these types should be accepted, for ergonomics
-            .path("path1")
-            .path(Path::new("path2"))
-            .path(PathBuf::from("path3".to_owned()));
+            .path(Path::new("path1"))
+            .path(PathBuf::from("path2".to_owned()));
         assert_cmd(builder, "ed", &["path1", "path2"]);
     }
 
@@ -300,7 +318,7 @@ mod tests {
     /// shellish_parse
     #[test]
     fn parsing() {
-        let builder = EditorCommand::new()
+        let builder = EditorBuilder::new()
             .source(Some("ned '--single \" quotes' \"--double ' quotes\""));
         assert_cmd(
             builder,
@@ -317,7 +335,7 @@ mod tests {
             ("EDITOR", None::<&str>),
         ]);
         assert_err(
-            EditorCommand::new().environment().source(None::<&str>),
+            EditorBuilder::new().environment().source(None::<&str>),
             "Edit command not defined in any of the listed sources",
         );
     }
@@ -326,7 +344,7 @@ mod tests {
     #[test]
     fn error_empty_command() {
         assert_err(
-            EditorCommand::new().source(Some("")),
+            EditorBuilder::new().source(Some("")),
             "Editor command is empty",
         );
     }
@@ -335,14 +353,14 @@ mod tests {
     #[test]
     fn error_invalid_command() {
         assert_err(
-            EditorCommand::new().source(Some("'unclosed quote")),
+            EditorBuilder::new().source(Some("'unclosed quote")),
             "Invalid editor command: dangling string",
         );
     }
 
     /// Assert that the builder creates the expected command
     fn assert_cmd(
-        builder: EditorCommand,
+        builder: EditorBuilder,
         expected_program: &str,
         expected_args: &[&str],
     ) {
@@ -358,7 +376,7 @@ mod tests {
     }
 
     /// Assert that the builder fails to build with the given error message
-    fn assert_err(builder: EditorCommand, expected_error: &str) {
+    fn assert_err(builder: EditorBuilder, expected_error: &str) {
         let error = builder.build().unwrap_err();
         assert_eq!(error.to_string(), expected_error);
     }
