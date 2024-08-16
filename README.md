@@ -1,18 +1,9 @@
-# rust-config
+# editor-command
 
-Common CI and crate configuration for my Rust projects. This is meant to be pulled in as a separate git remote in your repo.
+[![Test CI](https://github.com/github/docs/actions/workflows/test.yml/badge.svg)](https://github.com/LucasPickering/editor-command/actions)
+[![crates.io](https://img.shields.io/crates/v/editor-command.svg)](https://crates.io/crates/editor-command)
+[![docs.rs](https://img.shields.io/docsrs/editor-command)](https://docs.rs/editor-command)
 
-Initial setup for a repo:
+Load a user's preferred file editing command from the `VISUAL` or `EDITOR` environment variables.
 
-```
-git remote add ci git@github.com:LucasPickering/rust-config.git
-git fetch ci
-git cherry-pick ci/master
-```
-
-Pulling in new chains:
-
-```
-git fetch ci
-git merge ci/master
-```
+TODO code snippet

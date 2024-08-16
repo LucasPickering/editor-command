@@ -1,6 +1,8 @@
 [package]
 name = "editor-command"
+description = "TODO"
 authors = ["Lucas Pickering <lucas@lucaspickering.me>"]
+repository = "https://github.com/LucasPickering/editor-command"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -8,6 +10,12 @@ license = "MIT"
 rust-version = "1.76.0"
 
 [dependencies]
+shellish_parse = "2.2.0"
+thiserror = "1.0.63"
+
+[dev-dependencies]
+env-lock = "0.1.0"
+rstest = { version = "0.22.0", default-features = false }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
