@@ -1,12 +1,72 @@
 //! Get an executable [Command] to open a particular file in the user's
-//! configured editor, via the `VISUAL` or `EDITOR` environment variables. See
-//! the [editor_command] function for exact details on the behavior.
+//! configured editor.
+//!
+//! ## Features
+//!
+//! - Load editor command from the `VISUAL` or `EDITOR` environment variables
+//! - Specify high-priority override and low-priority default commands to use
+//! - Pass one or more paths to be opened by the editor
+//! - Flexible builder pattern
+//!
+//! ## Examples
+//!
+//! The simplest usage looks like this:
 //!
 //! ```
-//! // TODO
+//! # // Hide this part because it doesn't provide any value to the user
+//! # let _guard = env_lock::lock_env([
+//! #     ("VISUAL", None::<&str>),
+//! #     ("EDITOR", None),
+//! # ]);
+//! use editor_command::EditorCommand;
+//! use std::process::Command;
+//!
+//! std::env::set_var("VISUAL", "vim");
+//! let command: Command = EditorCommand::edit_file("file.txt").unwrap();
+//! assert_eq!(command.get_program(), "vim");
 //! ```
 //!
-//! TODO add section on lifetimes
+//! Here's an example of using the builder pattern to define a fallback command:
+//!
+//! ```
+//! # // Hide this part because it doesn't provide any value to the user
+//! # let _guard = env_lock::lock_env([
+//! #     ("VISUAL", None::<&str>),
+//! #     ("EDITOR", None),
+//! # ]);
+//! use editor_command::EditorCommand;
+//! use std::process::Command;
+//!
+//! let command: Command = EditorCommand::new()
+//!     .environment()
+//!     // If both VISUAL and EDITOR are undefined, we'll fall back to this
+//!     .source(Some("vi"))
+//!     .build()
+//!     .unwrap();
+//! assert_eq!(command.get_program(), "vi");
+//! ```
+//!
+//! ## Lifetimes
+//!
+//! [EditorCommand] accepts a lifetime parameter, which is bound to the string
+//! data it contains (both command strings and paths). This is to prevent
+//! unnecessary cloning when building commands/paths from `&str`s. If you need
+//! the instance of [EditorCommand] to be `'static`, e.g. so it can be returned
+//! from a function, you can simply use `EditorCommand<'static>`. Internally,
+//! all strings are stored as [Cow]s, so clones will be made as necessary.
+//!
+//! ```rust
+//! use editor_command::EditorCommand;
+//!
+//! /// This is a contrived example of returning a command with owned data
+//! fn get_editor_command<'a>(command: &'a str) -> EditorCommand<'static> {
+//!     // The lifetime bounds enforce the .to_owned() call
+//!     EditorCommand::new().source(Some(command.to_owned()))
+//! }
+//!
+//! let command = get_editor_command("vim").build().unwrap();
+//! assert_eq!(command.get_program(), "vim");
+//! ```
 //!
 //! ## Resources
 //!
@@ -28,7 +88,8 @@ use std::{
 /// [module-level documentation](super) for more details and examples.
 #[derive(Clone, Debug, Default)]
 pub struct EditorCommand<'a> {
-    /// TODO
+    /// Command to parse. This will be populated the first time we're given a
+    /// source with a value. After that, it remains unchanged.
     command: Option<Cow<'a, str>>,
     /// Path(s) to pass as the final argument(s) to the command
     paths: Vec<Cow<'a, Path>>,
@@ -43,19 +104,19 @@ impl<'a> EditorCommand<'a> {
 
     /// Shorthand for opening a file with the command set in `VISUAL`/`EDITOR`.
     ///
-    /// ```norun
+    /// ```ignore
     /// EditorCommand::edit_file("file.yml")
     /// ```
     ///
     /// is equivalent to:
     ///
-    /// ```norun
+    /// ```ignore
     /// EditorCommand::new().environment().path(path).build()
     /// ```
     pub fn edit_file(
-        path: impl Into<Cow<'a, Path>>,
+        path: impl AsRef<Path>,
     ) -> Result<Command, EditorCommandError> {
-        Self::new().environment().path(path).build()
+        Self::new().environment().path(path.as_ref()).build()
     }
 
     /// Add a static string as a source for the command. TODO more
@@ -84,6 +145,7 @@ impl<'a> EditorCommand<'a> {
     /// of paths. The paths will all be included in the final command, in the
     /// order this method was called.
     pub fn path(mut self, path: impl Into<Cow<'a, Path>>) -> Self {
+        // TODO accept &str, &Path, and PathBuf as args
         self.paths.push(path.into());
         self
     }
@@ -164,7 +226,7 @@ impl Error for EditorCommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsStr;
+    use std::{ffi::OsStr, path::PathBuf};
 
     /// Test loading from a static source that overrides the environment
     #[test]
@@ -227,8 +289,10 @@ mod tests {
     fn paths() {
         let builder = EditorCommand::new()
             .source(Some("ed"))
-            .path(Path::new("path1"))
-            .path(Path::new("path2"));
+            // All of these types should be accepted, for ergonomics
+            .path("path1")
+            .path(Path::new("path2"))
+            .path(PathBuf::from("path3".to_owned()));
         assert_cmd(builder, "ed", &["path1", "path2"]);
     }
 

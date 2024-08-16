@@ -6,4 +6,11 @@
 
 Load a user's preferred file editing command from the `VISUAL` or `EDITOR` environment variables.
 
-TODO code snippet
+```rust
+use editor_command::EditorCommand;
+use std::process::Command;
+
+std::env::set_var("VISUAL", "vim");
+let mut command: Command = EditorCommand::edit_file("file.txt").unwrap();
+command.spawn();
+```

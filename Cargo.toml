@@ -6,7 +6,6 @@ repository = "https://github.com/LucasPickering/editor-command"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-# Keep in sync w/ rust-toolchain.toml
 rust-version = "1.70.0"
 
 [dependencies]
