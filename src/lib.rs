@@ -14,8 +14,14 @@
 //! [check out this thread](https://unix.stackexchange.com/questions/4859/visual-vs-editor-what-s-the-difference).
 
 use shellish_parse::ParseOptions;
-use std::{borrow::Cow, env, path::Path, process::Command};
-use thiserror::Error;
+use std::{
+    borrow::Cow,
+    env,
+    error::Error,
+    fmt::{self, Display},
+    path::Path,
+    process::Command,
+};
 
 /// A builder for a [Command] that will open the user's configured editor. For
 /// simple cases you probably can just use [EditorCommand::edit_file]. See
@@ -116,19 +122,43 @@ impl<'a> EditorCommand<'a> {
 }
 
 /// Any error that can occur while loading the editor command.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum EditorCommandError {
     /// Couldn't find an editor command anywhere
-    #[error("Edit command not defined in any of the listed sources")]
     NoCommand,
 
     /// The editor command was found, but it's just an empty/whitespace string
-    #[error("Editor command is empty")]
     EmptyCommand,
 
     /// Editor command couldn't be parsed in a shell-like format
-    #[error("Invalid editor command: {0}")]
-    ParseError(#[source] shellish_parse::ParseError),
+    ParseError(shellish_parse::ParseError),
+}
+
+impl Display for EditorCommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EditorCommandError::NoCommand => write!(
+                f,
+                "Edit command not defined in any of the listed sources"
+            ),
+            EditorCommandError::EmptyCommand => {
+                write!(f, "Editor command is empty")
+            }
+            EditorCommandError::ParseError(source) => {
+                write!(f, "Invalid editor command: {source}")
+            }
+        }
+    }
+}
+
+impl Error for EditorCommandError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            EditorCommandError::NoCommand
+            | EditorCommandError::EmptyCommand => None,
+            EditorCommandError::ParseError(source) => Some(source),
+        }
+    }
 }
 
 #[cfg(test)]

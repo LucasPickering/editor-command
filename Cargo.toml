@@ -11,7 +11,6 @@ rust-version = "1.70.0"
 
 [dependencies]
 shellish_parse = "2.2.0"
-thiserror = "1.0.63"
 
 [dev-dependencies]
 env-lock = "0.1.0"
