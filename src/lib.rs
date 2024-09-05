@@ -55,6 +55,19 @@
 //! This pattern is useful for apps that have a way to configure an app-specific
 //! editor. For example, [git has the `core.editor` config field](https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration).
 //!
+//! ### Tokio
+//!
+//! [EditorBuilder] returns a `std` [Command], which will execute synchronously.
+//! If you want to run your editor subprocess asynchronously via
+//! [tokio](https://docs.rs/tokio/latest/tokio/), use the
+//! `From<std::process::Command>` impl on `tokio::process::Command`. For
+//! example:
+//!
+//! ```ignore
+//! let command: tokio::process::Command =
+//!     EditorBuilder::edit_file("file.yaml").unwrap().into();
+//! ```
+//!
 //! ## Syntax
 //!
 //! The syntax of the command is meant to resemble command syntax for common
