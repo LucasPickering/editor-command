@@ -7,7 +7,7 @@ name = "editor-command"
 version = "0.1.1"
 dependencies = [
  "env-lock",
- "shellish_parse",
+ "shell-words",
 ]
 
 [[package]]
@@ -17,7 +17,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1debf1b50da3e3685ac8afacc10fec00d5d23a78c31e80166a6375b7602f0ba9"
 
 [[package]]
-name = "shellish_parse"
-version = "2.2.0"
+name = "shell-words"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c29b912ad681a28566f37b936bba1f3580a93b9391c4a0b12cb1c6b4ed79973"
+checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"

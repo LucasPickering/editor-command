@@ -75,8 +75,8 @@
 //! by spaces) are arguments to that program. Single and double quotes can be
 //! used to join multiple tokens together into a single argument.
 //!
-//! Command parsing is handled by the crate [shellish_parse] (with default
-//! [ParseOptions]). Refer to those docs for exact details on the syntax.
+//! Command parsing is handled by the crate [shell-words]. Refer to those docs
+//! for exact details on the syntax.
 //!
 //! ## Lifetimes
 //!
@@ -105,7 +105,6 @@
 //! For more information on the `VISUAL` and `EDITOR` environment variables,
 //! [check out this thread](https://unix.stackexchange.com/questions/4859/visual-vs-editor-what-s-the-difference).
 
-use shellish_parse::ParseOptions;
 use std::{
     borrow::Cow,
     env,
@@ -198,9 +197,8 @@ impl<'a> EditorBuilder<'a> {
         let command_str = self.command.ok_or(EditorBuilderError::NoCommand)?;
 
         // Parse it as a shell command
-        let mut parsed =
-            shellish_parse::parse(&command_str, ParseOptions::default())
-                .map_err(EditorBuilderError::ParseError)?;
+        let mut parsed = shell_words::split(&command_str)
+            .map_err(EditorBuilderError::ParseError)?;
 
         // First token is the program name, rest are arguments
         let mut tokens = parsed.drain(..);
@@ -225,7 +223,7 @@ pub enum EditorBuilderError {
     EmptyCommand,
 
     /// Editor command couldn't be parsed in a shell-like format
-    ParseError(shellish_parse::ParseError),
+    ParseError(shell_words::ParseError),
 }
 
 impl Display for EditorBuilderError {
@@ -327,8 +325,7 @@ mod tests {
         assert_cmd(builder, "ed", &["path1", "path2"]);
     }
 
-    /// Test simple command parsing logic. We'll defer edge cases to
-    /// shellish_parse
+    /// Test simple command parsing logic. We'll defer edge cases to shell-words
     #[test]
     fn parsing() {
         let builder = EditorBuilder::new()
@@ -367,7 +364,7 @@ mod tests {
     fn error_invalid_command() {
         assert_err(
             EditorBuilder::new().source(Some("'unclosed quote")),
-            "Invalid editor command: dangling string",
+            "Invalid editor command: missing closing quote",
         );
     }
 
