@@ -1,0 +1,7 @@
+[tasks.doc]
+sources = ["Cargo.toml", "src/**"]
+run = "cargo doc"
+
+[tasks.test]
+sources = ["Cargo.toml", "src/**"]
+run = "cargo test"
