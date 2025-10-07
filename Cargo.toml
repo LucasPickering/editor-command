@@ -6,7 +6,7 @@ license = "MIT"
 name = "editor-command"
 repository = "https://github.com/LucasPickering/editor-command"
 rust-version = "1.70.0"
-version = "1.0.0"
+version = "2.0.0"
 
 [dependencies]
 shell-words = "1.1.0"

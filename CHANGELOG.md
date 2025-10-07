@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased] - ReleaseDate
 
+## [2.0.0] - 2025-10-07
+
 ### Breaking
 
 - `EditorBuilder::build` now returns an `Editor` instead of a command
